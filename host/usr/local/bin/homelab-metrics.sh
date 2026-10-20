@@ -80,3 +80,53 @@ if [ "$AGE" -ge 3600 ] && [ -n "$DEV" ] && command -v smartctl >/dev/null; then
     } > "$SMART.tmp" && mv "$SMART.tmp" "$SMART"
   fi
 fi
+
+# Electricity: an ESTIMATE of what the laptop draws at the wall, for the cost
+# panels. On the charger the battery reports 0 W (conservation mode holds it at
+# ~60%), so nothing measures wall power directly. Model:
+#   wall W = (CPU package W, measured by Intel RAPL, + BASE_W) / EFF
+# BASE_W is the rest of the laptop (RAM, NVMe, Wi-Fi, board) plus the USB backup
+# disk asleep. Calibrated 2026-10-20: on battery the whole laptop drew 4.46 W at
+# 0.07 busy cores, where RAPL puts the package at ~1.7 W (fit over 16 samples:
+# 1.54 W + 2.34 W per busy core), so the rest is ~2.75 W; plus ~0.5 W assumed for
+# the sleeping USB disk and its bridge. EFF is the charger's efficiency at ~10%
+# load (the EU minimum there is ~79%). On battery, the measured battery draw
+# replaces the model. The running total survives restarts in $STATE; a reboot or
+# a gap over 2 minutes is not counted.
+BASE_W=3.2
+EFF=0.80
+RAPL=/sys/class/powercap/intel-rapl:0
+STATE=/var/lib/homelab/power.state
+if [ -r "$RAPL/energy_uj" ]; then
+  mkdir -p "${STATE%/*}"
+  LAST="0 0 0 none"
+  [ -f "$STATE" ] && LAST=$(cat "$STATE")
+  awk -v now="$(date +%s.%N)" -v uj="$(cat "$RAPL/energy_uj")" -v max="$(cat "$RAPL/max_energy_range_uj")" \
+      -v ac="$(cat /sys/class/power_supply/ADP0/online 2>/dev/null || echo 1)" \
+      -v batw="$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0)" \
+      -v boot="$(cat /proc/sys/kernel/random/boot_id)" -v last="$LAST" \
+      -v base="$BASE_W" -v eff="$EFF" -v state="$STATE.tmp" '
+  BEGIN {
+    split(last, l, " ")   # last timestamp, last RAPL reading, running total (J), boot id
+    total = l[3] + 0; dt = now - l[1]
+    ok = (l[4] == boot && dt > 0 && dt <= 120)
+    if (ok) { d = uj - l[2]; if (d < 0) d += max; pkg = d / dt / 1e6 }
+    measured = (ac == 0 && batw > 0)
+    if (ok) { wall = (measured ? batw / 1e6 : pkg + base) / eff; total += wall * dt }
+    printf "%s %s %.3f %s\n", now, uj, total, boot > state
+    print "# HELP homelab_power_cpu_package_watts CPU package power (Intel RAPL)."
+    print "# TYPE homelab_power_cpu_package_watts gauge"
+    if (ok) printf "homelab_power_cpu_package_watts %.3f\n", pkg
+    print "# HELP homelab_power_wall_watts Estimated power drawn at the wall (model in homelab-metrics.sh)."
+    print "# TYPE homelab_power_wall_watts gauge"
+    if (ok) printf "homelab_power_wall_watts %.3f\n", wall
+    print "# HELP homelab_power_wall_measured 1 while on battery (measured draw), 0 while the model is used."
+    print "# TYPE homelab_power_wall_measured gauge"
+    printf "homelab_power_wall_measured %d\n", measured
+    print "# HELP homelab_energy_wall_joules_total Estimated energy drawn at the wall since tracking began."
+    print "# TYPE homelab_energy_wall_joules_total counter"
+    printf "homelab_energy_wall_joules_total %.3f\n", total
+  }' > "$OUT_DIR/power.prom.tmp"
+  mv "$STATE.tmp" "$STATE"
+  mv "$OUT_DIR/power.prom.tmp" "$OUT_DIR/power.prom"
+fi

@@ -102,6 +102,14 @@ memory, disk, Wi-Fi signal and container state.
   against Prometheus and fails on any that return nothing. It first checks itself
   against a metric that does not exist, so it cannot pass by accident.
 - Tested the failure path: stopping one container turns the Containers tile red.
+- **What it costs to run (an estimate, labelled as one).** On the charger, nothing reports
+  wall power: conservation mode holds the battery, so it reads 0 W. The metrics script
+  measures CPU power with Intel RAPL and adds the rest of the laptop. That figure was
+  calibrated once on battery, when the battery draw is the whole machine (4.46 W at idle).
+  It then divides by the charger's efficiency. Result: about 6.8 W at the wall, roughly
+  €16 a year at the price typed into the dashboard. On battery it switches to the
+  measured draw. A running total survives restarts, and RAPL counter wraps, reboots and
+  gaps are handled (tested on synthetic readings).
 
 **Alerts** ([rules in git](services/monitoring/grafana/provisioning/alerting/rules.yaml)) go to
 Telegram: server on battery, battery below 25%, CPU above 85 °C, disk above 85%, memory
@@ -180,7 +188,8 @@ host/etc/                  config files installed on the server
 host/usr/local/bin/        homelab-metrics.sh
 services/nextcloud/        compose.yaml, .env.example, apache-hsts.conf
 services/monitoring/       compose.yaml, prometheus.yml, Grafana provisioning + dashboard
-scripts/                   health-check.sh, check-dashboard.py, restore-test.sh
+scripts/                   health-check.sh, check-dashboard.py, restore-test.sh,
+                           test-power-model.py
 docs/                      write-ups and screenshots
 ```
 

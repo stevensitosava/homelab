@@ -13,8 +13,11 @@ import urllib.request
 ALLOWED_EMPTY = {"Off-site copy", "Off-site size"}
 
 
-def query(prom, expr):
+def query(prom, expr, variables=None):
     expr = expr.replace("$__rate_interval", "1m")
+    # Dashboard variables (e.g. the electricity price) are tested at their default value
+    for name in sorted(variables or {}, key=len, reverse=True):
+        expr = expr.replace("${%s}" % name, variables[name]).replace("$" + name, variables[name])
     url = prom + "/api/v1/query?" + urllib.parse.urlencode({"query": expr})
     with urllib.request.urlopen(url, timeout=10) as r:
         body = json.load(r)
@@ -36,11 +39,12 @@ def main():
 
     with open(path, encoding="utf-8") as f:
         dashboard = json.load(f)
+    variables = {v["name"]: v["current"]["value"] for v in dashboard.get("templating", {}).get("list", [])}
 
     failures = 0
     for panel in dashboard["panels"]:
         for target in panel.get("targets", []):
-            result, error = query(prom, target["expr"])
+            result, error = query(prom, target["expr"], variables)
             if error:
                 status, failures = "ERROR " + error, failures + 1
             elif not result:
