@@ -1,0 +1,23 @@
+# Vaultwarden: password manager that works with the official Bitwarden apps.
+#
+# Tailnet only, at https://homelab.<tailnet>.ts.net:7443 (tailscale serve).
+# Phones use it through the Tailscale app. Sign-ups are open only long enough
+# to create the owner account, then SIGNUPS_ALLOWED goes back to false.
+
+name: vaultwarden
+
+services:
+  vaultwarden:
+    image: vaultwarden/server:1.37.4-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:80"
+    environment:
+      DOMAIN: https://${TAILNET_HOST:?set it in .env}:7443
+      SIGNUPS_ALLOWED: ${SIGNUPS_ALLOWED:-false}
+      INVITATIONS_ALLOWED: "false"
+      PASSWORD_HINTS_ALLOWED: "false"
+      SHOW_PASSWORD_HINT: "false"
+      LOG_LEVEL: warn
+    volumes:
+      - ${APPDATA_DIR:?set it in .env}:/data

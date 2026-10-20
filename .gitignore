@@ -1,0 +1,6 @@
+.env
+*.env
+!.env.example
+secrets/
+# Rendered with the bot token on the server
+services/monitoring/grafana/provisioning/alerting/telegram.yaml

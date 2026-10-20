@@ -1,0 +1,32 @@
+# n8n: workflow automation, running 24/7.
+#
+# Private at https://homelab.<tailnet>.ts.net:5678 (tailscale serve) and public
+# at https://n8n.<domain> through the Cloudflare Tunnel, so outside apps can
+# reach its webhooks. Create the owner account BEFORE the public route exists.
+
+name: n8n
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.45.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      N8N_HOST: ${N8N_DOMAIN:?set it in .env}
+      N8N_PROTOCOL: https
+      N8N_PORT: "5678"
+      WEBHOOK_URL: https://${N8N_DOMAIN}/
+      # One proxy in front: tailscale serve or cloudflared
+      N8N_PROXY_HOPS: "1"
+      # Encrypts stored credentials. Losing it makes them unreadable: it is in the backups.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set it in .env}
+      GENERIC_TIMEZONE: Europe/Amsterdam
+      TZ: Europe/Amsterdam
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    volumes:
+      - ${APPDATA_DIR:?set it in .env}:/home/node/.n8n

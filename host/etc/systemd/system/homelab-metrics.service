@@ -1,0 +1,7 @@
+[Unit]
+Description=Write homelab metrics for node_exporter's textfile collector
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-metrics.sh

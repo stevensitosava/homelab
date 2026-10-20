@@ -1,0 +1,35 @@
+# Telegram contact point, message format and routing.
+#
+# Grafana does not expand environment variables in alerting files, so this
+# template is rendered on the server into telegram.yaml (which stays out of git):
+#   sed -e "s/__TELEGRAM_BOT_TOKEN__/$TOKEN/" -e "s/__TELEGRAM_CHAT_ID__/$CHAT/" \
+#     telegram.yaml.template > grafana/provisioning/alerting/telegram.yaml
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: telegram
+    receivers:
+      - uid: telegram
+        type: telegram
+        settings:
+          bottoken: __TELEGRAM_BOT_TOKEN__
+          chatid: "__TELEGRAM_CHAT_ID__"
+          message: '{{ template "homelab.telegram" . }}'
+        disableResolveMessage: false
+
+templates:
+  - orgId: 1
+    name: homelab.telegram
+    template: |
+      {{ define "homelab.telegram" }}{{ range .Alerts }}{{ if eq .Status "firing" }}🔴 {{ .Annotations.summary }}{{ else }}✅ Back to normal: {{ .Labels.alertname }}{{ end }}
+      {{ end }}{{ end }}
+
+policies:
+  - orgId: 1
+    receiver: telegram
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

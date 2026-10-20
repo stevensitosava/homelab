@@ -1,0 +1,15 @@
+# Cloudflare Tunnel: public HTTPS without opening a single port on the router.
+# cloudflared dials out to Cloudflare and keeps the connection open; Cloudflare
+# sends visitors down that connection to the services below.
+tunnel: homelab
+credentials-file: /home/nonroot/.cloudflared/homelab.json
+
+ingress:
+  - hostname: cloud.stevensawarin.com
+    service: http://127.0.0.1:8080
+  - hostname: n8n.stevensawarin.com
+    service: http://127.0.0.1:5678
+  - hostname: stats.stevensawarin.com
+    service: http://127.0.0.1:8000
+  # Required catch-all: anything else gets a 404, and cloudflared refuses to start without it
+  - service: http_status:404

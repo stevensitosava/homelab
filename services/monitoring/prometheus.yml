@@ -1,0 +1,54 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: node
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+        labels:
+          instance: homelab
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # Cloudflare Tunnel health (open connections to Cloudflare's edge)
+  - job_name: cloudflared
+    static_configs:
+      - targets: ["127.0.0.1:20241"]
+
+  # Health endpoints probed through blackbox_exporter: each app on its local
+  # port ("the app is up") and the public URLs through Cloudflare ("the
+  # internet can reach it": DNS, tunnel and app together).
+  - job_name: services
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["http://localhost:8080/status.php"]
+        labels: { service: Nextcloud }
+      - targets: ["http://127.0.0.1:3000/api/health"]
+        labels: { service: Grafana }
+      - targets: ["http://127.0.0.1:8081/alive"]
+        labels: { service: Vaultwarden }
+      - targets: ["http://127.0.0.1:9000/api/system/status"]
+        labels: { service: Portainer }
+      - targets: ["http://127.0.0.1:5678/healthz"]
+        labels: { service: n8n }
+      - targets: ["https://cloud.stevensawarin.com/status.php"]
+        labels: { service: "Nextcloud (public)" }
+      - targets: ["https://n8n.stevensawarin.com/healthz"]
+        labels: { service: "n8n (public)" }
+      - targets: ["http://127.0.0.1:8000/api/health"]
+        labels: { service: Plausible }
+      - targets: ["https://stats.stevensawarin.com/api/health"]
+        labels: { service: "Plausible (public)" }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115

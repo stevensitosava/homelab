@@ -1,0 +1,9 @@
+[Unit]
+Description=Ping healthchecks.io (outside heartbeat)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/homelab/healthchecks.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-heartbeat.sh

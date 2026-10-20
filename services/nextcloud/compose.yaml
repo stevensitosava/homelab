@@ -1,0 +1,82 @@
+# Nextcloud: files, photos, calendar and contacts.
+#
+# Reachable only through Tailscale. `tailscale serve` terminates HTTPS on
+# https://homelab.<tailnet>.ts.net and forwards to 127.0.0.1:8080, so the
+# home network never sees plain HTTP and nothing is exposed to the internet.
+#
+# Storage is split on purpose:
+#   APPDATA_DIR  app code, config, database  -> internal SSD (fast)
+#   DATA_DIR     user files                  -> one folder, so it can move to
+#                                               a bigger disk without a reinstall
+
+name: nextcloud
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/18/, so mount the parent
+      - ${APPDATA_DIR}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud -d nextcloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # Cache and file locking only: nothing worth persisting
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  app:
+    image: nextcloud:34-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:?set it in .env}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?set it in .env}
+      # Used at first install only; later domains are added with
+      #   occ config:system:set trusted_domains 2 --value=cloud.<domain>
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_DOMAIN:?set it in .env}
+      # No OVERWRITEHOST: Nextcloud answers on two hosts (Tailscale and the
+      # public domain) and builds links from whichever one the visitor used.
+      OVERWRITEPROTOCOL: https
+      OVERWRITECLIURL: https://${NEXTCLOUD_PUBLIC_DOMAIN:?set it in .env}
+      # tailscale serve and cloudflared both reach the app via the Docker bridge
+      # gateway; trusting it lets Nextcloud read the visitor's real IP from
+      # X-Forwarded-For, which its brute-force protection depends on.
+      TRUSTED_PROXIES: 172.16.0.0/12 127.0.0.1
+      PHP_MEMORY_LIMIT: 1G
+      PHP_UPLOAD_LIMIT: 16G
+    volumes:
+      - ${APPDATA_DIR}/html:/var/www/html
+      - ${DATA_DIR}:/var/www/html/data
+      - ./apache-hsts.conf:/etc/apache2/conf-enabled/hsts.conf:ro
+
+  cron:
+    image: nextcloud:34-apache
+    restart: unless-stopped
+    # Background jobs every 5 minutes (Nextcloud's recommended mode)
+    entrypoint: /cron.sh
+    depends_on:
+      - app
+    volumes:
+      - ${APPDATA_DIR}/html:/var/www/html
+      - ${DATA_DIR}:/var/www/html/data

@@ -1,0 +1,10 @@
+apiVersion: 1
+
+# Dashboards live in git (grafana/dashboards) and are loaded read-only.
+providers:
+  - name: homelab
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

@@ -1,0 +1,12 @@
+# Wi-Fi by interface NAME. The Ubuntu 26.04.1 installer writes Wi-Fi with a
+# "match:" block, which the networkd backend rejects ("does not support wifi
+# with match:"), so the connection never starts. Install as
+# /etc/netplan/99-wifi.yaml with mode 600 (it holds the password).
+network:
+  version: 2
+  wifis:
+    wlp0s20f3:
+      dhcp4: true
+      access-points:
+        "YOUR-NETWORK-NAME":
+          password: "YOUR-WIFI-PASSWORD"

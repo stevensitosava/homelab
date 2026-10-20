@@ -1,0 +1,66 @@
+# Plausible Community Edition: cookie-free website statistics.
+#
+# Public at https://stats.<domain> through the Cloudflare Tunnel, because websites
+# must reach its tracking script, and so clients can open shared links to their
+# own stats. Registration is closed after the owner account exists.
+#
+# Based on github.com/plausible/community-edition v3.2.1, adapted to this repo's
+# pattern: pinned images, data on bind mounts, app on 127.0.0.1 only.
+# ClickHouse needs ~2 GB RAM; the low-resources configs below keep it small.
+
+name: plausible
+
+services:
+  plausible_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      - ${APPDATA_DIR:?set it in .env}/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      start_period: 1m
+
+  plausible_events_db:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    volumes:
+      - ${APPDATA_DIR}/event-data:/var/lib/clickhouse
+      - ${APPDATA_DIR}/event-logs:/var/log/clickhouse-server
+      - ./clickhouse/logs.xml:/etc/clickhouse-server/config.d/logs.xml:ro
+      - ./clickhouse/ipv4-only.xml:/etc/clickhouse-server/config.d/ipv4-only.xml:ro
+      - ./clickhouse/low-resources.xml:/etc/clickhouse-server/config.d/low-resources.xml:ro
+      - ./clickhouse/default-profile-low-resources-overrides.xml:/etc/clickhouse-server/users.d/default-profile-low-resources-overrides.xml:ro
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O - http://127.0.0.1:8123/ping || exit 1"]
+      start_period: 1m
+
+  plausible:
+    image: ghcr.io/plausible/community-edition:v3.2.1
+    restart: unless-stopped
+    command: sh -c "/entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh run"
+    depends_on:
+      plausible_db:
+        condition: service_healthy
+      plausible_events_db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      TMPDIR: /var/lib/plausible/tmp
+      BASE_URL: ${BASE_URL:?set it in .env}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set it in .env}
+      TOTP_VAULT_KEY: ${TOTP_VAULT_KEY:?set it in .env}
+      # "false" only while the owner account is created, then "true"
+      DISABLE_REGISTRATION: ${DISABLE_REGISTRATION:-true}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@plausible_db:5432/plausible_db
+      CLICKHOUSE_DATABASE_URL: http://plausible_events_db:8123/plausible_events_db
+    volumes:
+      - ${APPDATA_DIR}/data:/var/lib/plausible
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }

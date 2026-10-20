@@ -1,0 +1,29 @@
+# cloudflared: runs the Cloudflare Tunnel defined in config.yml.
+#
+# Only Nextcloud and n8n are public. Everything else (Grafana, Portainer,
+# Vaultwarden) stays reachable through Tailscale only.
+#
+# One-time setup, run with this image and the same volume:
+#   tunnel login                                   -> cert.pem (authorizes the domain)
+#   tunnel create --credentials-file .../homelab.json homelab
+#   tunnel route dns homelab cloud.<domain>        (and n8n.<domain>)
+
+name: cloudflared
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.2
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --config
+      - /etc/cloudflared/config.yml
+      # Tunnel health for Prometheus, local only
+      - --metrics
+      - 127.0.0.1:20241
+      - run
+    volumes:
+      - ./config.yml:/etc/cloudflared/config.yml:ro
+      - ${APPDATA_DIR:?set it in .env}:/home/nonroot/.cloudflared:ro

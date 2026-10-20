@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up the homelab to the USB disk (restic)
+Requires=docker.service
+After=docker.service mnt-backup.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-backup.sh
+# systemd sets no $HOME, so give restic a cache folder (makes later runs faster)
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+Nice=10
+IOSchedulingClass=idle

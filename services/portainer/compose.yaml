@@ -1,0 +1,24 @@
+# Portainer: see, restart and inspect containers from the browser.
+#
+# Tailnet only, at https://homelab.<tailnet>.ts.net:9443 (tailscale serve).
+# It holds the Docker socket, which is root on the host, so it must never be
+# published to the internet.
+
+name: portainer
+
+services:
+  portainer:
+    image: portainer/portainer-ce:2.45.2-alpine
+    restart: unless-stopped
+    command: --admin-password-file /run/secrets/admin_password
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${APPDATA_DIR:?set it in .env}:/data
+    secrets:
+      - admin_password
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password
