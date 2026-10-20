@@ -1,0 +1,4 @@
+# Everything here runs on Linux. Keep LF on every checkout, Windows included,
+# or the shell scripts and systemd units break with "\r" errors on the server.
+* text=auto eol=lf
+*.png binary
